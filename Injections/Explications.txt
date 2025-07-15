@@ -1,0 +1,42 @@
+pe32.dwSize = sizeof(PROCESSENTRY32);
+
+How is the sizeof calculated ?
+sizeof is a compile time operator 
+it returs the total number of bytes occupied by the type PROCESSENTRY32
+
+this structure is defined as:
+typedef struct tagPROCESSENTRY32 {
+    DWORD dwSize;
+    DWORD cntUsage;
+    DWORD th32ProcessID;
+    ULONG_PTR th32DefaultHeapID;
+    DWORD th32ModuleID;
+    DWORD cntThreads;
+    DWORD th32ParentProcessID;
+    LONG pcPriClassBase;
+    DWORD dwFlags;
+    TCHAR szExeFile[MAX_PATH];
+} PROCESSENTRY32;
+
+so sizeof(PROCESSENTRY32) will compute the total size of all those fields 
+
+
+HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+This calls a Windows API function to create a snapshot of all currently running processes in the system.
+
+TH32CS_SNAPPROCESS: tells Windows you want to take a snapshot of the process list.
+0: means "give me all processes" 
+(the second parameter can specify a specific PID if you're taking snapshots of threads or modules, but for processes, it's always 0).
+
+CreateToolhelp32Snapshot() returns a HANDLE — basically a reference to a kernel object.
+
+That handle lets you iterate through the list of processes using:
+
+Process32First(snapshot, &pe32);
+
+Process32Next(snapshot, &pe32);
+
+These functions fill in the pe32 structure with info about each process: PID, exe name, parent PID, etc.
+
+
