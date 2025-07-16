@@ -6,7 +6,7 @@
 #define Info(msg, ...) printf("[*] " msg "\n", ##__VA_ARGS__)
 #define Warn(msg, ...) printf("[-] " msg "\n", ##__VA_ARGS__)
 
-int main() {
+int main(void) {
   HANDLE hThread = NULL;
   LPVOID rAlloc_mem = NULL;
   DWORD dwTID = 0;
