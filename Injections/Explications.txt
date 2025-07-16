@@ -39,4 +39,21 @@ Process32Next(snapshot, &pe32);
 
 These functions fill in the pe32 structure with info about each process: PID, exe name, parent PID, etc.
 
+HANDLE OpenProcess(
+  [in] DWORD dwDesiredAccess,   // Specifies the access rights requested for the process (e.g., read, write, terminate).
+  [in] BOOL  bInheritHandle,    // If TRUE, the returned handle can be inherited by child processes; if FALSE, it cannot.
+  [in] DWORD dwProcessId        // The unique identifier (ID) of the process to open.
+);
+If the function succeeds, the return value is an open handle to the specified process.
+If the function fails, the return value is NULL.
 
+LPVOID VirtualAllocEx(
+  [in]           HANDLE hProcess, Expects a handle to the process where memory will be allocated.
+  [in, optional] LPVOID lpAddress, Expects a pointer to the starting address for the allocation. If NULL, the system determines the address.
+  [in]           SIZE_T dwSize, Expects the size of the memory block to be allocated, in bytes.
+  [in]           DWORD  flAllocationType, Expects the type of memory allocation (e.g., MEM_COMMIT, MEM_RESERVE).
+  [in]           DWORD  flProtect Expects the memory protection for the allocated region (e.g., PAGE_READWRITE).
+);
+
+If the function succeeds, the return value is a pointer to the allocated memory in the specified process.
+If the function fails, the return value is NULL.
