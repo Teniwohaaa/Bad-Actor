@@ -4,9 +4,9 @@ If we are going to work with #include <tlhelp32.h>, we will use:
 
 CreateToolhelp32Snapshot — to take a snapshot of the processes.
 
-Process32First — to retrieve info about the first process.
+Process32Firstw — to retrieve info about the first process.
 
-Process32Next — to iterate over remaining processes.
+Process32Nextw — to iterate over remaining processes.
 
 OpenProcess — to get a handle to the target process.
 
@@ -30,24 +30,24 @@ CreateToolhelp32Snapshot() returns a HANDLE — basically a reference to a kerne
 
 That handle lets you iterate through the list of processes using:
 
-    Process32First(snapshot, &pe32);
-    Process32Next(snapshot, &pe32);
+    Process32Firstw(snapshot, &pe32);
+    Process32Nextw(snapshot, &pe32);
 
 These functions fill in the pe32 structure with info about each process: PID, exe name, parent PID, etc.
 
-PROCESS32FIRST & PROCESS32NEXT
+PROCESS32FIRSTW & PROCESS32NEXTW
 -------------------------------
-Process32First() and Process32Next() are used to retrieve information about processes in the system.
-- Process32First() retrieves information about the first process in the snapshot.
-- Process32Next() retrieves information about the next process in the snapshot.
+Process32Firstw() and Process32Nextw() are used to retrieve information about processes in the system.
+- Process32Firstw() retrieves information about the first process in the snapshot.
+- Process32Nextw() retrieves information about the next process in the snapshot.
 - Both functions fill a PROCESSENTRY32 structure with details about the process, such as its ID, name, and other attributes.
-  BOOL Process32First(
+  BOOL Process32Firstw(
   [in]      HANDLE           hSnapshot, //A handle to the snapshot returned from a previous call to the CreateToolhelp32Snapshot function.
   [in, out] LPPROCESSENTRY32 lppe //A pointer to a PROCESSENTRY32 structure. It contains process information
 
 ); 
 exsample:
-Process32First(hSnapshot, &pe32);
+Process32Firstw(hSnapshot, &pe32);
 
 PROCESSENTRY32 STRUCTURE & SIZE
 -------------------------------
@@ -59,7 +59,7 @@ It returns the total number of bytes occupied by the type PROCESSENTRY32.
 
 This structure is defined as:
 typedef struct tagPROCESSENTRY32 {
-    DWORD dwSize; // Size of the structure, must be set before calling Process32First or Process32Next
+    DWORD dwSize; // Size of the structure, must be set before calling Process32FirstW or Process32NextW
     DWORD cntUsage; // Count of times the process is used (not always relevant)
     DWORD th32ProcessID; // Unique identifier for the process 
     ULONG_PTR th32DefaultHeapID; // Default heap ID for the process
