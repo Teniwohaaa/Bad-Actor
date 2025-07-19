@@ -1,0 +1,17 @@
+here we just displayed a simple message box using the MessageBox function
+
+MessageBox
+---------------
+int MessageBox(
+  [in, optional] HWND    hWnd, // Handle to the owner window of the message box
+  [in, optional] LPCTSTR lpText, // Text to be displayed in the message box
+  [in, optional] LPCTSTR lpCaption, // Text to be displayed in the title bar of the message box
+  [in]           UINT    uType // Type of message box (e.g., MB_OK, MB_ICONINFORMATION, etc.
+);
+
+in utype it can be set to different values like MB_OK, MB_ICONINFORMATION, etc.
+the means the message box will have an OK button and an information icon, etc.
+
+exsample:
+
+MessageBox(NULL, "Hello, World!", "My DLL", MB_OK | MB_ICONINFORMATION);
