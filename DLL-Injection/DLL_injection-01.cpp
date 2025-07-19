@@ -6,7 +6,7 @@
 
 DWORD WINAPI TestFunction(LPVOID lpParam) {
   okay("Thread running...");
-  printf(" Meowww = ^..^= !");
+  okay(" Meowww = ^..^= !");
   return EXIT_SUCCESS;
 }
 
@@ -31,9 +31,10 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  hThread = CreateThread(NULL, 0, TestFunction, NULL, 0, NULL);
+  hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)TestFunction, NULL, 0,
+                         NULL);
   if (hThread == NULL) {
-    warn("failed to create the handle");
+    warn("failed to create the handle, error:%ld", GetLastError());
     return EXIT_FAILURE;
   }
   // now we wait
